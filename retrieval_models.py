@@ -25,8 +25,20 @@ def bm25(q_tokens, index, field="all", k1=1.2, b=0.75):
 def linear_combination(q_tokens, index, weights=None, k1=1.2, b=0.75):
     """sum_c w_c * BM25_c(q, d), with k1 and b shared by all fields (saturation per field)."""
     ### YOUR CODE HERE
-    pass
 
+    scores = np.zeros(index["N"], dtype=float)
+    matched = np.zeros(index["N"], dtype=bool)
+
+    if weights is None:
+        weights = {field: 1.0 for field in FIELDS}
+
+    for field in FIELDS:
+        field_scores = bm25(q_tokens, index, field, k1=k1, b=b)
+        field_mask = np.isfinite(field_scores)
+        scores[field_mask] += weights * field_scores[field_mask]
+        matched[field_mask] = True
+
+    return np.where(matched, scores, -np.inf)
 
 
 #  BM25 variants

@@ -23,7 +23,6 @@ def grid_search(evaluator, score_fn, grid, qids, **fixed):
     h_params_range = [grid[h_param] for h_param in h_params]
 
     for combination in itertools.product(*h_params_range):
-
         name_comb = dict(zip(h_params, combination))
         params = {**fixed, **name_comb}
         MAP_per_comb = evaluator.mean_ap(score_fn, qids, **params)
