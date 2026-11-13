@@ -89,18 +89,26 @@ def bmx(q_tokens, index, alpha=None, beta=None, field="all"):
         if beta is None:
             beta = default_beta
 
-    scores = np.zeros(index["N"])
-    matched_counts = np.zeros(index["N"], dtype=int)
+    scores = np.zeros(index["N"], dtype=float)
+    matched_counts = np.zeros(index["N"], dtype=int) # distinct query terms appearing in product fields
     m = len(set(q_tokens))
     term_ids = [t for t, _ in query_terms(q_tokens, index)]
     if m == 0 or not term_ids:
         return np.full(index["N"], -np.inf)
 
-    for t, qtf in query_terms(q_tokens, index):
+    raw = np.array([raw_entropy(index, t, field) for t in term_ids])
+    max_raw = raw.max()
+    entropy = raw / max_raw if max_raw > 0 else np.zeros_like(raw)
+    mean_entropy = entropy.sum() / m
+    for t in term_ids:
         rows, tf = postings(index, field, t)
-        entropy = raw_entropy(index, t, field)
-        scores[rows] += index["idf"][t] * tf * (alpha + 1.0) / (tf + alpha * index["length"][field] / index["avgdl"][field] + alpha  ) + beta * entropy *
+        if rows.size == 0:
+            continue
+        scores[rows] += index["idf"][t] * tf * (alpha + 1.0) / (tf + alpha * index["length"]["field"][rows] / index["avgdl"][field] + alpha * mean_entropy)
+        matched_counts[rows] += 1
 
+    scores[matched_counts > 0] += beta * (matched_counts[matched_counts > 0] / m) * entropy.sum()
+    return np.where(matched_counts > 0, scores, -np.inf)
 
 # BM25F
 def bm25f(q_tokens, index, k1=1.2, boost=None, b=None, fields=FIELDS):
