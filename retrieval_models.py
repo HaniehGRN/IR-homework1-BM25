@@ -129,7 +129,6 @@ def bm25f(q_tokens, index, k1=1.2, boost=None, b=None, fields=FIELDS):
     norms = {
         field: length_norm(index, field, b[field]) for field in fields if boost[field] != 0 and index["avgdl"][field] > 0
     }
-
     for t, _ in query_terms(q_tokens, index):
         tf_tilda = np.zeros(index["N"], dtype=float)
         for field, norm in norms.items():
