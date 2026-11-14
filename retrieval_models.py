@@ -20,7 +20,6 @@ def bm25(q_tokens, index, field="all", k1=1.2, b=0.75):
     return np.where(matched, scores, -np.inf)
 
 
-
 #  linear combination of fields
 def linear_combination(q_tokens, index, weights=None, k1=1.2, b=0.75):
     """sum_c w_c * BM25_c(q, d), with k1 and b shared by all fields (saturation per field)."""
@@ -58,6 +57,7 @@ def bm25l(q_tokens, index, k1=1.2, b=0.75, delta=0.5, field="all"):
 
     return np.where(matched, scores, -np.inf)
 
+
 def raw_entropy(index, t, field="all"):
     """Ẽ(t) = -Σ p log p over the products containing t, with p = sigmoid(tf)."""
     ### YOUR CODE HERE
@@ -66,7 +66,6 @@ def raw_entropy(index, t, field="all"):
         return 0.0
     p = 1.0 / (1.0 + np.exp(-tf))
     return float(-np.sum(p * np.log(p)))
-
 
 
 def bmx_defaults(index, field="all"):
@@ -104,11 +103,12 @@ def bmx(q_tokens, index, alpha=None, beta=None, field="all"):
         rows, tf = postings(index, field, t)
         if rows.size == 0:
             continue
-        scores[rows] += index["idf"][t] * tf * (alpha + 1.0) / (tf + alpha * index["length"]["field"][rows] / index["avgdl"][field] + alpha * mean_entropy)
+        scores[rows] += index["idf"][t] * tf * (alpha + 1.0) / (tf + alpha * index["length"][field][rows] / index["avgdl"][field] + alpha * mean_entropy)
         matched_counts[rows] += 1
 
     scores[matched_counts > 0] += beta * (matched_counts[matched_counts > 0] / m) * entropy.sum()
     return np.where(matched_counts > 0, scores, -np.inf)
+
 
 # BM25F
 def bm25f(q_tokens, index, k1=1.2, boost=None, b=None, fields=FIELDS):
@@ -119,4 +119,24 @@ def bm25f(q_tokens, index, k1=1.2, boost=None, b=None, fields=FIELDS):
     with the RSJ idf(t) = log((N - df + 0.5) / (df + 0.5)) (index["idf_rsj"]),
     no query term weights and no (k1 + 1)."""
     ### YOUR CODE HERE
-    pass
+    if boost is None:
+        boost = {field: 1 for field in fields}
+    if b is None:
+        b = {field: 0.75 for field in fields}
+
+    scores = np.zeros(index["N"], dtype=float)
+    matched = np.zeros(index["N"], dtype=bool)
+    norms = {
+        field: length_norm(index, field, b[field]) for field in fields if boost[field] != 0 and index["avgdl"][field] > 0
+    }
+
+    for t, _ in query_terms(q_tokens, index):
+        tf_tilda = np.zeros(index["N"], dtype=float)
+        for field, norm in norms.items():
+            rows, tf = postings(index, field, t)
+            tf_tilda[rows] += boost[field] * tf / norm[rows]
+        x = tf_tilda[tf_tilda > 0]
+        scores[tf_tilda > 0] += index["idf_rsj"][t] * x / (k1 + x)
+        matched |= tf_tilda > 0
+
+    return np.where(matched, scores, -np.inf)
