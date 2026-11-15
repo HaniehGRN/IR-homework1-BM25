@@ -5,6 +5,7 @@ import math
 
 import numpy as np
 import pandas as pd
+import scipy
 
 METRICS = ["MAP", "MRR", "P@3", "P@10", "R@3", "R@10", "nDCG@10"]
 
@@ -64,4 +65,43 @@ class Evaluator:
 def significance_test(runs, baseline, metrics=("AP", "nDCG@10"), alpha=0.05):
     """Paired t-test of every run against `baseline` on the per-query values of each metric."""
     ### YOUR CODE HERE
-    pass
+    baseline_run = runs[baseline]
+    rows = []
+    for method, run in runs.items():
+        if method == baseline:
+            continue
+
+        if (
+                not run.index.is_unique
+                or not baseline_run.index.is_unique
+                or set(run.index) != set(baseline_run.index)
+        ):
+            raise ValueError(f"{method}: query IDs must match the baseline")
+
+        run = run.reindex(baseline_run.index)
+
+        for metric in metrics:
+            scores = run[metric].to_numpy(dtype=float)
+            base_scores = baseline_run[metric].to_numpy(dtype=float)
+            diff = scores - base_scores
+
+            if diff.size < 2 or not np.isfinite(diff).all():
+                raise ValueError(f"{method}, {metric}: invalid paired scores")
+
+            p_value = 1.0 if np.all(diff == 0) else float(
+                scipy.stats.ttest_rel(scores, base_scores).pvalue
+            )
+
+            rows.append({
+                "method": method,
+                "metric": metric,
+                "method_mean": scores.mean(),
+                "baseline_mean": base_scores.mean(),
+                "mean_diff": diff.mean(),
+                "better": int((diff > 0).sum()),
+                "worse": int((diff < 0).sum()),
+                "p_value": p_value,
+                "significant": p_value < alpha,
+            })
+
+    return pd.DataFrame(rows)
